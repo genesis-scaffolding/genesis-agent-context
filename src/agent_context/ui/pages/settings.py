@@ -3,10 +3,17 @@
 Two expanders expose ``facade.backup``:
 
 - "Download backup" runs ``export_to_bytes`` on demand and offers the
-  result as ``st.download_button``.
+  result as ``st.download_button``. The built archive is cached in
+  session state so it can be downloaded, and the cache is dropped as
+  soon as the download happens so a stale snapshot is never silently
+  re-offered.
 - "Restore from backup" accepts a zip via ``st.file_uploader``,
   validates it, requires the user to acknowledge the destructive
   intent, then runs ``import_from_bytes``.
+
+The data scope of an archive is the journal entries (memory,
+memory-synthesis, daily-handover) and the profile store (profile.md,
+protocol.md, and their ``.versions`` edit history snapshots).
 
 Validation, destructive confirmation, and the resulting counts are
 all rendered in place so the user has enough information to make
@@ -19,7 +26,7 @@ from datetime import UTC, datetime
 
 import streamlit as st
 
-from agent_context.backup import ArchiveError, ValidationReport
+from agent_context.backup import ArchiveError, RestoreReport, ValidationReport
 from agent_context.ui._state import get_facade
 
 facade = get_facade()
@@ -31,7 +38,21 @@ st.caption("Account and data management.")
 # Default file name for downloads. The user can override through the
 # widget; rendering the suggested name in the caption keeps it visible
 # without occupying form real estate.
-_default_filename = f"agent-context-backup-{facade.configs.user}-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ".zip"
+_default_filename = (
+    f"agent-context-backup-{facade.configs.user}-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ".zip"
+)
+
+
+def _discard_cached_backup() -> None:
+    """Drop the cached archive after a download.
+
+    The cached bytes represent the state at build time. Keeping them
+    around would let the user download an archive that no longer
+    matches their data, with nothing on screen to say so. Clearing
+    them forces a fresh build for the next download.
+    """
+    st.session_state.pop("settings_backup_bytes", None)
+    st.session_state.pop("settings_backup_built_at", None)
 
 
 def _render_validation(report: ValidationReport) -> None:
@@ -46,19 +67,25 @@ def _render_validation(report: ValidationReport) -> None:
             f"**Sections present:** {sorted(report.present_sections) or 'none'}"
         )
         counts = m.counts
-        st.markdown(
-            "**Counts (from manifest):** "
-            f"projects `{counts.projects}`, tasks `{counts.tasks}`, "
-            f"events `{counts.events}`, time_log `{counts.time_log}`, "
-            f"journal `{counts.journal}`, "
-            f"profile `{counts.profile}`, contacts `{counts.contacts}`"
-        )
+        st.markdown(f"**Counts (from manifest):** journal `{counts.journal}`, profile `{counts.profile}`")
 
     if report.issues:
         for issue in report.issues:
             st.error(issue)
     elif report.ok:
         st.success("Archive passed structural validation.")
+
+
+def _render_restore_report(report: RestoreReport) -> None:
+    """Render the outcome of a successful restore."""
+    st.markdown(f"**Restored counts:** journal `{report.journal}`, profile `{report.profile}`")
+    if report.safety_backup is not None:
+        st.markdown(
+            f"**Pre-restore snapshot saved to:** "
+            f"`{report.safety_backup}` "
+            "— keep it until you are confident "
+            "the restore is what you wanted."
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -68,9 +95,10 @@ def _render_validation(report: ValidationReport) -> None:
 
 with st.expander("Download backup", expanded=False):
     st.write(
-        "Build a zip archive of every task, project, calendar event, "
-        "time log entry, journal entry, contact, and your profile and "
-        "life story on your account. Save the file somewhere safe."
+        "Build a zip archive of your journal entries (memory, "
+        "memory-synthesis, and daily-handover) and your profile store "
+        "(profile.md, protocol.md, including their .versions edit "
+        "history snapshots). Save the file somewhere safe."
     )
     filename = st.text_input(
         "File name",
@@ -89,6 +117,7 @@ with st.expander("Download backup", expanded=False):
         if build_clicked:
             with st.spinner("Building backup archive..."):
                 st.session_state["settings_backup_bytes"] = backup.export_to_bytes()
+                st.session_state["settings_backup_built_at"] = datetime.now(UTC)
         st.download_button(
             "Download backup archive",
             data=st.session_state["settings_backup_bytes"],
@@ -96,7 +125,15 @@ with st.expander("Download backup", expanded=False):
             mime="application/zip",
             key="settings_backup_download",
             type="primary",
+            on_click=_discard_cached_backup,
         )
+        built_at = st.session_state.get("settings_backup_built_at")
+        if built_at is not None:
+            st.caption(
+                f"Archive built at `{built_at.isoformat()}` (UTC). "
+                "The archive is cleared once you download it, so prepare "
+                "a fresh one if you need another copy."
+            )
 
 # -----------------------------------------------------------------------------
 # Restore from backup
@@ -105,12 +142,13 @@ with st.expander("Download backup", expanded=False):
 
 with st.expander("Restore from backup", expanded=False):
     st.warning(
-        "Restoring from a backup **overwrites** every task, project, "
-        "calendar event, time log entry, journal entry, contact, and "
-        "your profile and life story (including their edit history) "
-        "currently on your account. A snapshot of your current data is "
-        "saved automatically before the overwrite, so you can recover "
-        "if the archive turns out to be wrong."
+        "Restoring from a backup **overwrites** your journal entries "
+        "(memory, memory-synthesis, and daily-handover) and your "
+        "profile store (profile.md, protocol.md, including their "
+        ".versions edit history snapshots) currently on your account. "
+        "A snapshot of your current data is saved automatically before "
+        "the overwrite, so you can recover if the archive turns out to "
+        "be wrong."
     )
     st.write(
         "We strongly recommend downloading the current state from the Download backup section above before restoring."
@@ -165,26 +203,11 @@ with st.expander("Restore from backup", expanded=False):
                     else:
                         placeholder.empty()
                         st.success("Restore complete.")
-                        st.markdown(
-                            "**Restored counts:** "
-                            f"projects `{report.projects}`, "
-                            f"tasks `{report.tasks}`, "
-                            f"events `{report.events}`, "
-                            f"time_log `{report.time_log}`, "
-                            f"journal `{report.journal}`, "
-                            f"contacts `{report.contacts}`"
-                        )
-                        if report.safety_backup is not None:
-                            st.markdown(
-                                f"**Pre-restore snapshot saved to:** "
-                                f"`{report.safety_backup}` "
-                                "— keep it until you are confident "
-                                "the restore is what you wanted."
-                            )
+                        _render_restore_report(report)
                         # Drop the cached bytes so a rerun does not
                         # redownload the previous build right under
                         # the new restore report.
-                        st.session_state.pop("settings_backup_bytes", None)
+                        _discard_cached_backup()
 
 
 # -----------------------------------------------------------------------------

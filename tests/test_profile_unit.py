@@ -103,13 +103,13 @@ class FakeFs(FsOps):
 # ---------------------------------------------------------------------------
 
 
-def test_targets_lists_both_profile_and_life_story():
-    assert TARGETS == (ProfileTarget.PROFILE, ProfileTarget.LIFE_STORY)
+def test_targets_lists_profile_and_protocol():
+    assert TARGETS == (ProfileTarget.PROFILE, ProfileTarget.PROTOCOL)
 
 
 def test_target_filename_mapping():
     assert TARGET_FILENAME[ProfileTarget.PROFILE] == "profile.md"
-    assert TARGET_FILENAME[ProfileTarget.LIFE_STORY] == "life-story.md"
+    assert TARGET_FILENAME[ProfileTarget.PROTOCOL] == "protocol.md"
 
 
 def test_resolve_location_uses_canonical_filename(tmp_path: Path):
@@ -120,14 +120,14 @@ def test_resolve_location_uses_canonical_filename(tmp_path: Path):
     assert loc.target is ProfileTarget.PROFILE
 
 
-def test_resolve_location_life_story(tmp_path: Path):
-    loc = resolve_location(ProfileTarget.LIFE_STORY, tmp_path)
-    assert loc.path == tmp_path / "life-story.md"
+def test_resolve_location_protocol(tmp_path: Path):
+    loc = resolve_location(ProfileTarget.PROTOCOL, tmp_path)
+    assert loc.path == tmp_path / "protocol.md"
 
 
 def test_parse_target_accepts_known_values():
     assert parse_target("profile") is ProfileTarget.PROFILE
-    assert parse_target("life_story") is ProfileTarget.LIFE_STORY
+    assert parse_target("protocol") is ProfileTarget.PROTOCOL
 
 
 def test_parse_target_rejects_unknown():
@@ -137,7 +137,7 @@ def test_parse_target_rejects_unknown():
 
 def test_versions_dir_layout(tmp_path: Path):
     assert versions_dir(tmp_path, ProfileTarget.PROFILE) == tmp_path / ".versions" / "profile"
-    assert versions_dir(tmp_path, ProfileTarget.LIFE_STORY) == tmp_path / ".versions" / "life_story"
+    assert versions_dir(tmp_path, ProfileTarget.PROTOCOL) == tmp_path / ".versions" / "protocol"
 
 
 # ---------------------------------------------------------------------------
@@ -286,8 +286,8 @@ def test_list_targets_returns_both_rows(tmp_path: Path):
     by_target = {r.target: r for r in rows}
     assert by_target[ProfileTarget.PROFILE].exists is True
     assert by_target[ProfileTarget.PROFILE].bytes == 3
-    assert by_target[ProfileTarget.LIFE_STORY].exists is False
-    assert by_target[ProfileTarget.LIFE_STORY].bytes == 0
+    assert by_target[ProfileTarget.PROTOCOL].exists is False
+    assert by_target[ProfileTarget.PROTOCOL].bytes == 0
 
 
 # ---------------------------------------------------------------------------
@@ -684,10 +684,10 @@ def test_facade_history_limit_caps_rows_but_total_is_unfiltered(tmp_path: Path):
     assert capped.total == 5
 
 
-def test_facace_read_life_story_round_trip(tmp_path: Path):
+def test_facade_read_protocol_round_trip(tmp_path: Path):
     fs = FakeFs()
     facade = ProfileFacade(tmp_path, fs=fs)
-    wr = facade.write(ProfileTarget.LIFE_STORY, "Once upon a time\n")
+    wr = facade.write(ProfileTarget.PROTOCOL, "Once upon a time\n")
     assert wr.ok is True
-    rd = facade.read(ProfileTarget.LIFE_STORY)
+    rd = facade.read(ProfileTarget.PROTOCOL)
     assert rd.content == "Once upon a time"

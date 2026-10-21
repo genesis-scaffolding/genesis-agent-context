@@ -53,7 +53,12 @@ app.add_typer(journals_app, name="journals")
 @journals_app.command(name="list")
 def journal_list(
     user: str = _user_option,
-    type_filter: str | None = typer.Option(None, "--type", "-t", help="Filter by entry type (e.g. daily, memory, handover)."),
+    type_filter: str | None = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Filter by entry type (e.g. memory, memory-synthesis, daily-handover).",
+    ),
     limit: int = typer.Option(50, "--limit", "-n", help="Max entries to return."),
 ) -> None:
     """List journal entries."""
@@ -129,7 +134,7 @@ def journal_create(
         typer.echo(f"Created entry: {entry.uid}")
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
     finally:
         facade.shutdown()
 

@@ -14,10 +14,9 @@ fully-qualified ``datetime.date`` everywhere.
 import datetime
 from datetime import UTC
 from datetime import datetime as _datetime
-from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, Field, PlainSerializer
 
 from ..journal.facade import EntryType
 from ..profile import ProfileTarget
@@ -45,9 +44,8 @@ UtcDateTime = Annotated[
 
 
 # Wire-side journal type re-exported as a string-valued alias.
-# The entity's EntryType values (``daily | weekly | monthly | yearly |
-# project | misc | memory | handover``) are the wire values; no mapping
-# is required.
+# The entity's EntryType values (``memory | memory-synthesis | daily-handover``)
+# are the wire values; no mapping is required.
 JournalWireType = EntryType
 
 
@@ -85,6 +83,31 @@ class JournalListOut(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class JournalAppendIn(BaseModel):
+    """Request body for POST /journals/{uid}/append."""
+
+    content: str
+
+
+class JournalSearchResultItemOut(BaseModel):
+    """One result in a search response."""
+
+    uid: str
+    type: JournalWireType | None
+    date: datetime.date
+    title: str | None
+    score: int
+    snippet: str
+
+
+class JournalSearchOut(BaseModel):
+    """Response for GET /journals/search."""
+
+    items: list[JournalSearchResultItemOut]
+    total: int
+    query: str
 
 
 # ---------------------------------------------------------------------------

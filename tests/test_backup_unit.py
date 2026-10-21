@@ -9,18 +9,16 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from agent_context.backup import (
     MANIFEST_SCHEMA_VERSION,
-    ArchiveError,
     BackupFacade,
-    Manifest,
     RestoreReport,
-    ValidationReport,
 )
-from agent_context.backup.manifest import Counts
+from agent_context.core.facade import Facade
 from agent_context.journal.facade import Entry, EntryType, JournalFacade
 
 
@@ -55,13 +53,13 @@ def backup(layout: SimpleNamespace) -> BackupFacade:
         Entry(
             date=date_cls(2026, 9, 1),
             title="Day one",
-            type=EntryType.DAILY,
+            type=EntryType.MEMORY,
             content="First entry\n",
         ),
         Entry(
             date=date_cls(2026, 9, 2),
             title="Day two",
-            type=EntryType.DAILY,
+            type=EntryType.MEMORY,
             content="Second entry\n",
         ),
     ]
@@ -81,7 +79,7 @@ def backup(layout: SimpleNamespace) -> BackupFacade:
             for e in journal_entries:
                 self.journal.save_entry(e)
 
-    return BackupFacade(_MockFacade())
+    return BackupFacade(cast(Facade, _MockFacade()))
 
 
 def test_export_manifest_schema_version(backup: BackupFacade) -> None:
@@ -138,8 +136,8 @@ def test_validate_archive_wrong_user(layout: SimpleNamespace, backup: BackupFaca
 
 def test_validate_archive_bad_zip() -> None:
     """Non-zip data is rejected."""
-    facade = object()  # dummy
-    bf = BackupFacade(facade)  # type: ignore[arg-type]
+    facade = cast(Facade, object())  # dummy
+    bf = BackupFacade(facade)
     report = bf.validate_archive(b"not a zip")
     assert not report.ok
     assert any("not a valid zip" in i for i in report.issues)
@@ -151,6 +149,7 @@ def test_import_round_trip(layout: SimpleNamespace, backup: BackupFacade) -> Non
 
     # Wipe the user's dirs
     import shutil
+
     shutil.rmtree(layout.jrn_user)
     shutil.rmtree(layout.profile_root)
 

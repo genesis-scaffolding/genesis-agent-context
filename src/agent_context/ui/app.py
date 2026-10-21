@@ -33,9 +33,12 @@ rehydrate_session()
 render_logout_button()
 
 nav: dict[str, list[st.Page]] = {
+    "Persona": [
+        _page(_PAGES / "profile.py", "Persona", ":material/person:", "persona"),
+    ],
     "Context": [
-        _page(_PAGES / "journal.py", "Journal", ":material/article:", "journal"),
-        _page(_PAGES / "profile.py", "Profile", ":material/person:", "profile"),
+        _page(_PAGES / "journal.py", "Memory", ":material/article:", "memory"),
+        _page(_PAGES / "protocol.py", "Protocol", ":material/play_for_work:", "protocol"),
     ],
     "Account": [
         _page(_PAGES / "settings.py", "Settings", ":material/settings:", "settings"),

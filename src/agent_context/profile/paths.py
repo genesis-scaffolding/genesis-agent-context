@@ -20,14 +20,11 @@ from pathlib import Path
 class ProfileTarget(StrEnum):
     """The two profile targets served by this module.
 
-    Wire values are the lowercase enum names. ``life_story`` is
-    the wire form (matches the out-of-tree tool's
-    ``life-story.md`` filename via the mapping below); ``LIFE_STORY``
-    is the Python identifier.
+    Wire values are the lowercase enum names.
     """
 
     PROFILE = "profile"
-    LIFE_STORY = "life_story"
+    PROTOCOL = "protocol"
 
 
 # Canonical filenames per target. Lives here, not in the API or
@@ -35,7 +32,7 @@ class ProfileTarget(StrEnum):
 # a string.
 TARGET_FILENAME: dict[ProfileTarget, str] = {
     ProfileTarget.PROFILE: "profile.md",
-    ProfileTarget.LIFE_STORY: "life-story.md",
+    ProfileTarget.PROTOCOL: "protocol.md",
 }
 
 # Snapshot directory name (a hidden dotfile inside the profile root).
@@ -48,7 +45,7 @@ VERSIONS_DIR_NAME = ".versions"
 # by any iterator that needs to walk "all of them" in a stable order.
 TARGETS: tuple[ProfileTarget, ...] = (
     ProfileTarget.PROFILE,
-    ProfileTarget.LIFE_STORY,
+    ProfileTarget.PROTOCOL,
 )
 
 

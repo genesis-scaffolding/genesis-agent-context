@@ -83,11 +83,11 @@ def auth(profile_client: TestClient) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def test_list_returns_both_targets_with_no_files(profile_client, auth):
+def test_list_returns_profile_and_protocol_no_files(profile_client, auth):
     r = profile_client.get("/profile", headers=auth)
     assert r.status_code == 200
     body = r.json()
-    assert {row["target"] for row in body["rows"]} == {"profile", "life_story"}
+    assert {row["target"] for row in body["rows"]} == {"profile", "protocol"}
     assert all(row["exists"] is False for row in body["rows"])
     assert all(row["bytes"] == 0 for row in body["rows"])
     assert body["profile_root"].endswith("/agent-context/default/profile")
@@ -99,7 +99,7 @@ def test_list_reports_existence_after_write(profile_client, auth):
     rows = {row["target"]: row for row in r.json()["rows"]}
     assert rows["profile"]["exists"] is True
     assert rows["profile"]["bytes"] == 2
-    assert rows["life_story"]["exists"] is False
+    assert rows["protocol"]["exists"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -121,16 +121,16 @@ def test_read_returns_content(profile_client, auth):
     assert r.json()["path"].endswith("/profile.md")
 
 
-def test_read_life_story(profile_client, auth):
+def test_read_protocol(profile_client, auth):
     profile_client.put(
-        "/profile/life_story",
+        "/profile/protocol",
         headers=auth,
         json={"content": "Once upon a time\n"},
     )
-    r = profile_client.get("/profile/life_story", headers=auth)
+    r = profile_client.get("/profile/protocol", headers=auth)
     assert r.status_code == 200
     assert r.json()["content"] == "Once upon a time"
-    assert r.json()["target"] == "life_story"
+    assert r.json()["target"] == "protocol"
 
 
 def test_read_unknown_target_returns_404(profile_client, auth):
