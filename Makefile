@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test typecheck run-cli run-ui api serve clean
+.PHONY: help install install-dev lint format test test-all test-integration typecheck run-cli run-ui ui api serve docker-build docker-run clean
 
 # -----------------------------------------------------------------------------
 # Meta
@@ -52,15 +52,15 @@ test-integration:  ## Run integration tests only
 # -----------------------------------------------------------------------------
 
 run-cli:  ## Run the CLI app
-	uv run genesis
+	uv run gac
 
-ui:  ## Start the Streamlit UI for the default user
-	uv run streamlit run src/genesis/ui/asgi_app.py --server.address $${GENESIS_UI_HOST:-0.0.0.0} --server.port $${GENESIS_UI_PORT:-3000} --server.headless true
+ui:  ## Start the Streamlit UI for the default user (GAC_UI_HOST/GAC_UI_PORT, default 0.0.0.0:3001)
+	uv run gac-ui
 
 run-ui: ui  ## Deprecated alias for `make ui`
 
-api:  ## Start the FastAPI server for the default user (GENESIS_API_PORT, default 8765)
-	uv run genesis-api
+api:  ## Start the FastAPI server for the default user (GAC_API_HOST/GAC_API_PORT, default 0.0.0.0:8766)
+	uv run gac-api
 
 # Run UI and API together. Uses Make's parallel-job mechanism
 # (``-j 2``) so GNU Make itself handles signal propagation: when
@@ -69,8 +69,24 @@ api:  ## Start the FastAPI server for the default user (GENESIS_API_PORT, defaul
 # is the same pattern genesis-scaffolding/Makefile uses for its
 # ``dev`` target and avoids any custom trap logic in the recipe.
 serve:  ## Start UI and API together (Ctrl+C to stop both)
-	@echo "Starting UI on $${GENESIS_UI_PORT:-3000} and API on $${GENESIS_API_PORT:-8765} (Ctrl+C to stop both)..."
+	@echo "Starting UI on $${GAC_UI_PORT:-3001} and API on $${GAC_API_PORT:-8766} (Ctrl+C to stop both)..."
 	@$(MAKE) -j 2 ui api
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+
+docker-build:  ## Build the container image locally
+	docker build -t genesis-agent-context:local .
+
+docker-run:  ## Run the container locally on :3001 (UI) and :8766 (API)
+	docker run --rm -p 3001:3001 -p 8766:8766 \
+		-e PUID=$$(id -u) -e PGID=$$(id -g) \
+		-v $$(pwd)/.docker-data/config:/home/gac/.config \
+		-v $$(pwd)/.docker-data/data:/home/gac/.local/share \
+		-v $$(pwd)/.docker-data/state:/home/gac/.local/state \
+		-v $$(pwd)/.docker-data/cache:/home/gac/.cache \
+		genesis-agent-context:local
 
 # -----------------------------------------------------------------------------
 # Utility

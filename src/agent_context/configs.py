@@ -261,8 +261,12 @@ class Configs(BaseSettings):
 def _extract_user(yaml_path: Path | None) -> str:
     """Extract user from yaml_path directory structure.
 
-    Expected: <xdg_config_home>/genesis/<user>/configs.yaml
+    Expected: <xdg_config_home>/agent-context/<user>/configs.yaml
     Falls back to DEFAULT_USER if path doesn't match expected pattern.
+
+    The app directory is matched at its *innermost* occurrence: an
+    ancestor directory named after the app (e.g. a home directory
+    ``/home/agent-context``) must not shadow the real user segment.
 
     The check for `user != "configs.yaml"` keeps backward compatibility with
     the legacy flat path (~/.config/genesis/configs.yaml). With the implicit
@@ -274,7 +278,12 @@ def _extract_user(yaml_path: Path | None) -> str:
 
     parts = yaml_path.parts
     try:
-        agent_context_idx = parts.index(DEFAULT_APP_NAME)
+        # Match the LAST occurrence: the app dir is the innermost one. A
+        # first-occurrence match breaks when an ancestor directory is also
+        # named after the app, e.g. a home directory /home/agent-context ->
+        # /home/agent-context/.config/agent-context/<user>/configs.yaml
+        # would extract ".config" as the user.
+        agent_context_idx = len(parts) - 1 - parts[::-1].index(DEFAULT_APP_NAME)
         if len(parts) >= agent_context_idx + 2:
             user = parts[agent_context_idx + 1]
             if user != "configs.yaml":

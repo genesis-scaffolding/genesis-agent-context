@@ -13,3 +13,6 @@ wheels/
 .agents/
 .pi/
 .cptr
+
+# Local docker state (bind mounts for `make docker-run`)
+.docker-data/
