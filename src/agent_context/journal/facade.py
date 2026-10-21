@@ -3,24 +3,19 @@
 Provides access to journal entries stored as markdown files.
 Each entry is keyed by a UID (UUID4 hex) and stored as ``{uid}.md``.
 
-Identity rules:
-- Daily / weekly / monthly / yearly entries are unique within their
-  period. ``save_entry`` rejects a save if another entry of the same
-  type already owns the period (same date for daily, same ISO week
-  for weekly, same month for monthly, same year for yearly).
-- ``project`` and ``misc`` entries have no uniqueness constraint —
-  many may coexist.
+Entry types (all day-anchored):
+- ``memory`` — raw per-day agent observations.
+- ``memory-synthesis`` — synthesised daily memory. Upsert semantics:
+  a second save for the same day replaces the existing entry.
+- ``daily-handover`` — per-day append log of agent actions after tasks.
 
-Date semantics (see ADR-017):
-- ``Entry.date`` is the creation day for the entry. It is set when
-  the entry is first saved and is not editable via the API.
-- ``Entry.reference_date`` is the period anchor: the calendar day for
-  a daily entry, Monday of that ISO week for a weekly entry, the
-  1st of the month for a monthly entry, January 1 for a yearly
-  entry, and ``None`` for project / misc / untyped entries. The
-  server computes it from ``date`` + ``type`` on save. The PATCH
-  endpoint does not accept changes to either field; clients must
-  delete and re-create to relocate an entry to a different period.
+All three types are unique per (type, date). A second create for the
+same (type, day) is rejected (except memory-synthesis which replaces).
+
+Date semantics:
+- ``Entry.date`` is the creation day. Set at creation; not editable via the API.
+- ``Entry.reference_date`` is always equal to ``date`` for the three types.
+  ``None`` for untyped entries. Server-computed on save.
 """
 
 from __future__ import annotations
@@ -31,7 +26,7 @@ import secrets
 import string
 from dataclasses import dataclass, field
 from datetime import date as date_cls
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
@@ -57,26 +52,22 @@ def new_uid(prefix: str) -> str:
 class EntryType(StrEnum):
     """Journal entry type.
 
-    Used to filter the journal list page. Values are stored verbatim in
-    the markdown frontmatter. Changing a value is a
-    backward-incompatible change for existing entries.
+    Exactly three values, all day-anchored. Values are stored verbatim
+    in the markdown frontmatter.
+
+    Wire values use hyphens (memory-synthesis, daily-handover) per the
+    approved brief naming. Python identifiers use underscores.
     """
 
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    BRIEFING = "briefing"
-    MONTHLY = "monthly"
-    YEARLY = "yearly"
-    PROJECT = "project"
-    MISC = "misc"
     MEMORY = "memory"
-    HANDOVER = "handover"
+    MEMORY_SYNTHESIS = "memory-synthesis"
+    DAILY_HANDOVER = "daily-handover"
 
 
 # Entry types that have a period anchor and therefore participate in
-# uniqueness checks. ``project`` and ``misc`` are free-form notes.
+# uniqueness checks. All three are day-anchored.
 _PERIODIC_TYPES: frozenset[EntryType] = frozenset(
-    {EntryType.DAILY, EntryType.WEEKLY, EntryType.MONTHLY, EntryType.YEARLY, EntryType.BRIEFING}
+    {EntryType.MEMORY, EntryType.MEMORY_SYNTHESIS, EntryType.DAILY_HANDOVER}
 )
 
 
@@ -87,13 +78,12 @@ class Entry(BaseModel):
         uid: UUID4 hex string. Primary identity. Auto-generated if not
             supplied on create.
         date: Creation day. Set at creation; not editable from the API.
-        reference_date: Period anchor (Monday for weekly, 1st of month
-            for monthly, January 1 for yearly, ``date`` for daily,
-            ``None`` for project / misc / untyped). Server-computed on
-            save; not editable from the API.
+        reference_date: Period anchor. For the three day-anchored types,
+            this is always ``date``. For untyped entries, ``None``.
+            Server-computed on save; not editable from the API.
         title: Optional human title shown in the journal list and detail.
-        type: Optional entry type used for filter chips and the periodic
-            uniqueness rule.
+        type: Entry type (memory, memory-synthesis, daily-handover).
+            ``None`` for entries with an unrecognized type string on disk.
         content: Markdown body.
         created: When the file was created (from filesystem mtime).
         modified: When the file was last modified (from filesystem mtime).
@@ -119,23 +109,11 @@ def _normalize_reference_date(
 ) -> date_cls | None:
     """Return the period anchor for ``entry_type`` applied to ``on``.
 
-    - daily, briefing -> ``on`` (the day itself)
-    - weekly  -> Monday of ``on``'s ISO week
-    - monthly -> 1st of ``on``'s month
-    - yearly  -> January 1 of ``on``'s year
-    - project, misc, None -> ``None`` (no period anchor)
+    All three current types are day-anchored: reference_date == date.
     """
     if entry_type is None:
         return None
-    if entry_type == EntryType.DAILY or entry_type == EntryType.BRIEFING:
-        return on
-    if entry_type == EntryType.WEEKLY:
-        return on - timedelta(days=on.isoweekday() - 1)
-    if entry_type == EntryType.MONTHLY:
-        return on.replace(day=1)
-    if entry_type == EntryType.YEARLY:
-        return on.replace(month=1, day=1)
-    return None
+    return on
 
 
 @dataclass
@@ -252,20 +230,24 @@ class JournalFacade:
                 entry_date = date_cls.fromisoformat(date_value)
             else:
                 entry_date = date_cls.fromtimestamp(stat.st_ctime)
-            entry_type = EntryType(type_str) if type_str else None
+            if type_str:
+                try:
+                    entry_type = EntryType(type_str)
+                except ValueError:
+                    # Unknown type string on disk: treat as None rather than losing the file.
+                    entry_type = None
+            else:
+                entry_type = None
             ref_value = meta.get("reference-date")
             if isinstance(ref_value, date_cls):
                 entry_ref = ref_value
             elif isinstance(ref_value, str):
                 entry_ref = date_cls.fromisoformat(ref_value)
             else:
-                # Legacy file written before ADR-017 — no
-                # ``reference-date`` line. Daily entries default to
-                # ``date`` (which is already the calendar day for
-                # daily entries). Periodic entries default to
-                # ``None`` until :meth:`repair_reference_dates`
-                # brings them up to date.
-                entry_ref = entry_date if entry_type == EntryType.DAILY else None
+                # Legacy file with no ``reference-date`` line.
+                # For the three day-anchored types, reference_date
+                # defaults to entry_date. Untyped entries default to None.
+                entry_ref = entry_date if entry_type in _PERIODIC_TYPES else None
             return Entry(
                 uid=uid,
                 date=entry_date,
@@ -285,19 +267,16 @@ class JournalFacade:
         Server-side behaviour:
 
         - Computes the period anchor from ``entry.type`` and ``entry.date``.
-          If the caller supplied ``entry.reference_date`` explicitly, it
-          is validated against the anchor — daily must equal ``date``,
-          weekly must equal Monday of that ISO week, monthly must equal
-          the 1st, yearly must equal January 1. A mismatch raises
-          ``ValueError``.
-        - For daily / weekly / monthly / yearly entries, rejects the save
-          with ``ValueError`` if another entry of the same type already
-          owns the period.
+          For the three day-anchored types, anchor equals ``date``.
+          A mismatch raises ``ValueError``.
+        - For day-anchored entries (memory, memory-synthesis, daily-handover),
+          rejects the save with ``ValueError`` if another entry of the same
+          type already owns the period.
         - Persists ``reference-date`` to the frontmatter whenever it is
           not ``None``.
-
-        ``project`` and ``misc`` entries skip the uniqueness check; they
-        are free-form notes, not periodic anchors.
+        - ``memory-synthesis`` entries use upsert semantics: if an entry
+          of the same type exists for the same period, the old entry file
+          is deleted and the new one takes its place.
         """
         normalized_ref = _normalize_reference_date(entry.type, entry.date)
         if entry.type in _PERIODIC_TYPES:
@@ -310,6 +289,13 @@ class JournalFacade:
                     f"for type {entry.type.value}",
                 )
             effective_ref = entry.reference_date if entry.reference_date is not None else normalized_ref
+            # MEMORY_SYNTHESIS upsert: delete the old entry for the same period if any.
+            # This runs BEFORE the uniqueness check so the old entry is gone before
+            # we look for duplicates.
+            if entry.type == EntryType.MEMORY_SYNTHESIS:
+                existing_synth = self.find_for_period(EntryType.MEMORY_SYNTHESIS, entry.date)
+                if existing_synth is not None and existing_synth.uid != entry.uid:
+                    self.delete_entry(existing_synth.uid)
             if effective_ref is not None:
                 existing = self.find_for_period(entry.type, effective_ref)
                 if existing is not None and existing.uid != entry.uid:
@@ -363,15 +349,13 @@ class JournalFacade:
         Thin wrapper around :meth:`find_for_period` kept for callers
         that want a daily-specific name.
         """
-        return self.find_for_period(EntryType.DAILY, target_date)
+        return self.find_for_period(EntryType.MEMORY, target_date)
 
     def find_for_period(self, entry_type: EntryType, on_or_in: date_cls) -> Entry | None:
-        """Return the periodic entry for ``entry_type`` covering ``on_or_in``.
+        """Return the day-anchored entry for ``entry_type`` on ``on_or_in``.
 
-        The reference date is normalised server-side: any day in a week
-        for ``weekly``, any day in a month for ``monthly``, any day in
-        a year for ``yearly``. Daily accepts the date as-is. Project
-        and misc have no period anchor and always return ``None``.
+        For day-anchored types (memory, memory-synthesis, daily-handover),
+        ``on_or_in`` is accepted as-is. For untyped entries, always returns None.
         """
         normalized = _normalize_reference_date(entry_type, on_or_in)
         if normalized is None:
@@ -382,20 +366,18 @@ class JournalFacade:
         return None
 
     def repair_reference_dates(self) -> RepairReport:
-        """One-shot migration for periodic entries missing ``reference-date``.
+        """One-shot migration for day-anchored entries missing ``reference-date``.
 
-        Walks the journal directory. For each weekly / monthly / yearly
-        entry whose on-disk ``reference-date`` is missing, computes the
-        period anchor from ``(type, date)`` and re-saves the file. The
-        re-save goes through :meth:`save_entry`, so any duplicate that
-        emerges after normalisation is rejected and reported in
-        ``failures`` rather than raised.
+        Walks the journal directory. For each day-anchored entry
+        (memory, memory-synthesis, daily-handover) whose on-disk
+        ``reference-date`` is missing, computes the period anchor
+        (equal to ``date``) and re-saves the file. The re-save
+        goes through :meth:`save_entry`, so any duplicate that emerges
+        is rejected and reported in ``failures`` rather than raised.
 
         Idempotent: re-running on already-repaired entries is a no-op.
 
-        Legacy daily entries and untyped / project / misc entries are
-        skipped — daily entries have ``reference-date == date`` which
-        is filled in on read; the others have no period anchor.
+        Untyped entries are skipped — they have no period anchor.
         """
         report = RepairReport()
         for path in sorted(self._journal_path.glob("*.md")):
@@ -415,3 +397,157 @@ class JournalFacade:
             except ValueError as exc:
                 report.failures.append((entry.uid, str(exc)))
         return report
+
+    # ---- Append ---------------------------------------------------------
+
+    def append_entry(self, uid: str, block: str) -> Entry | None:
+        """Append a markdown block to the entry body.
+
+        The block is appended after a horizontal-rule separator. Write is
+        atomic: content is written to a temp file then renamed over the
+        target, so concurrent appends are last-writer-safe.
+
+        Returns the updated entry, or None if the entry does not exist.
+        Raises ValueError if the entry is MEMORY_SYNTHESIS (append is not
+        meaningful for synthesis content).
+        """
+        entry = self.get_entry(uid)
+        if entry is None:
+            return None
+        if entry.type == EntryType.MEMORY_SYNTHESIS:
+            raise ValueError("Cannot append to a memory-synthesis entry; use create/replace instead")
+        separator = "\n\n---\n\n"
+        new_content = entry.content + separator + block
+        entry.content = new_content
+        # Atomic write: write to temp then rename.
+        # Build meta dict the same way save_entry does, so frontmatter
+        # (reference-date, type, title) is preserved across appends.
+        meta: dict = {"date": entry.date.isoformat()}
+        if entry.reference_date is not None:
+            meta["reference-date"] = entry.reference_date.isoformat()
+        if entry.type is not None:
+            meta["type"] = entry.type.value
+        if entry.title:
+            meta["title"] = entry.title
+        path = self._entry_path(uid)
+        tmp = path.with_suffix(".tmp")
+        try:
+            tmp.write_text(_serialize(meta, new_content))
+            tmp.rename(path)
+        except OSError:
+            if tmp.exists():
+                tmp.unlink()
+            raise
+        # Re-read to confirm the update.
+        return self.get_entry(uid)
+
+    # ---- Search ---------------------------------------------------------
+
+    def search_entries(
+        self,
+        query: str,
+        *,
+        entry_type: EntryType | None = None,
+        date_from: date_cls | None = None,
+        date_to: date_cls | None = None,
+        limit: int = 20,
+    ) -> list[Entry]:
+        """Full-text search with token scoring.
+
+        Scoring per token (best match per entry only):
+        - whole-word match: +2
+        - suffix match (token is suffix of a word in text): +1
+        - substring match: +1 (tokens < 3 chars are ignored)
+
+        Returns entries sorted by score desc, then date desc, capped at limit.
+        Only entries with score > 0 are returned.
+        """
+        tokens = [t.lower() for t in query.split() if len(t) >= 3]
+        if not tokens:
+            return []
+        results: list[tuple[int, date_cls, Entry]] = []
+        for entry in self.list_entries():
+            if entry_type is not None and entry.type != entry_type:
+                continue
+            ref = entry.reference_date if entry.reference_date is not None else entry.date
+            if date_from is not None and ref < date_from:
+                continue
+            if date_to is not None and ref > date_to:
+                continue
+            score, _ = self._score_entry(entry, tokens)
+            if score > 0:
+                results.append((score, ref, entry))
+        # Sort: score desc, date desc
+        results.sort(key=lambda x: (-x[0], -x[1].toordinal()))
+        return [entry for _, _, entry in results[:limit]]
+
+    def _score_entry(self, entry: Entry, tokens: list[str]) -> tuple[int, int]:
+        """Score an entry against token list.
+
+        Returns (total_score, best_match_char_position) for snippet extraction.
+        """
+        combined = (entry.title or "") + " " + entry.content
+        combined_lower = combined.lower()
+        words = combined.split()
+        total_score = 0
+        best_pos = -1
+        best_score = 0
+
+        for token in tokens:
+            token_best_pos = -1
+            token_best_score = 0
+
+            # Whole-word matches: token surrounded by word boundaries. Score +2.
+            for m in re.finditer(r"(?<![a-zA-Z])" + re.escape(token) + r"(?![a-zA-Z])", combined_lower):
+                token_best_score = 2
+                token_best_pos = m.start()
+                break  # whole-word match takes priority; no suffix/substring contribution
+
+            # Suffix matches: token matches the end of a word. Score +1.
+            if token_best_score == 0:
+                for word in words:
+                    wl = word.lower()
+                    if wl.endswith(token) and wl != token:
+                        token_best_score = 1
+                        idx = combined_lower.find(wl)
+                        if idx != -1:
+                            token_best_pos = idx
+                        break  # only best match counts
+
+            # Substring matches: token appears anywhere. Score +1.
+            if token_best_score == 0:
+                m = re.search(re.escape(token), combined_lower)
+                if m:
+                    token_best_score = 1
+                    token_best_pos = m.start()
+
+            if token_best_score > 0:
+                total_score += token_best_score
+                if token_best_pos != -1 and token_best_score > best_score:
+                    best_score = token_best_score
+                    best_pos = token_best_pos
+
+        return total_score, best_pos
+
+    def get_snippet(self, entry: Entry, position: int, radius: int = 60) -> str:
+        """Extract a snippet of text around ``position``."""
+        combined = (entry.title or "") + " " + entry.content
+        start = max(0, position - radius)
+        end = min(len(combined), position + radius)
+        snippet = combined[start:end]
+        prefix = "..." if start > 0 else ""
+        suffix = "..." if end < len(combined) else ""
+        return prefix + snippet + suffix
+
+    # ---- Resolve --------------------------------------------------------
+
+    def resolve_memory_for_date(self, target_date: date_cls) -> Entry | None:
+        """Synthesis-aware read for memory type.
+
+        Returns the memory-synthesis entry for that date if it exists,
+        else the memory entry, else None.
+        """
+        synth = self.find_for_period(EntryType.MEMORY_SYNTHESIS, target_date)
+        if synth is not None:
+            return synth
+        return self.find_for_period(EntryType.MEMORY, target_date)

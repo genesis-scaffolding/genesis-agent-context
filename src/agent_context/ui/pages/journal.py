@@ -28,17 +28,15 @@ journal = facade.journal
 
 
 _PERIODIC_TYPES: tuple[EntryType, ...] = (
-    EntryType.DAILY,
-    EntryType.BRIEFING,
-    EntryType.WEEKLY,
-    EntryType.MONTHLY,
-    EntryType.YEARLY,
+    EntryType.MEMORY,
+    EntryType.MEMORY_SYNTHESIS,
+    EntryType.DAILY_HANDOVER,
 )
 
 
 def _render_list() -> None:
-    st.title("Journal")
-    st.caption("Reflect on your progress and plan your future.")
+    st.title("Memory")
+    st.caption("Per-day memory: raw observations, synthesis, and handover logs.")
 
     today = date.today()
     existing = {t: journal.find_for_period(t, today) for t in _PERIODIC_TYPES}
@@ -47,7 +45,7 @@ def _render_list() -> None:
     # Entry". The periodic openers sit below as a quiet "today" row
     # so the primary action is never competing with four siblings.
     if st.button(
-        "+ New Entry",
+        "+ New Memory Entry",
         key="new_entry_btn",
         type="primary",
         icon=":material/add:",
@@ -184,9 +182,7 @@ def _render_list_empty() -> None:
     user can act without scrolling.
     """
     st.write("")
-    st.info(
-        "No journal entries yet. Use **+ New Entry** above to write your first one. Daily entries are a good default."
-    )
+    st.info("No memory entries yet. Use **+ New Memory Entry** above to write your first one.")
 
 
 # -----------------------------------------------------------------------------
@@ -209,7 +205,7 @@ def _render_view(uid: str) -> None:
         return
 
     # Breadcrumb + back link on the first row.
-    st.caption(f"Productivity > Journal > {entry.date.isoformat()}")
+    st.caption(f"Context > Memory > {entry.date.isoformat()}")
     if st.button(
         "Back",
         key="je_back",
@@ -232,12 +228,12 @@ def _render_edit(uid: str) -> None:
         st.warning("Entry not found.")
         return
 
-    type_options = [t.value for t in EntryType]
-    type_labels = ["(none)"] + type_options
+    type_options = [t.value for t in _PERIODIC_TYPES]
+    type_labels = list(type_options)
     cur_type_label = entry.type.value if entry.type else "(none)"
     cur_idx = type_labels.index(cur_type_label) if cur_type_label in type_labels else 0
 
-    st.caption(f"Productivity > Journal > {entry.date.isoformat()} > Edit")
+    st.caption(f"Context > Memory > {entry.date.isoformat()} > Edit")
     if st.button(
         "Back",
         key="je_edit_back",
@@ -246,7 +242,7 @@ def _render_edit(uid: str) -> None:
     ):
         st.query_params.pop("edit", None)
         st.rerun()
-    st.title(f"Edit {entry.date.isoformat()}")
+    st.title("Edit Memory Entry")
 
     with st.form(f"je_edit_{uid}"):
         ftitle = st.text_input("Title", value=entry.title or "")
@@ -284,10 +280,10 @@ def _render_edit(uid: str) -> None:
 
 
 def _render_create(uid: str) -> None:
-    type_labels = ["(none)"] + [t.value for t in EntryType]
+    type_labels = [t.value for t in _PERIODIC_TYPES]
     today = date.today()
 
-    st.caption("Productivity > Journal > New Entry")
+    st.caption("Context > Memory > New Entry")
     if st.button(
         "Back",
         key="je_create_back",
@@ -296,10 +292,10 @@ def _render_create(uid: str) -> None:
     ):
         st.query_params.clear()
         st.rerun()
-    st.title("New Journal Entry")
+    st.title("New Memory Entry")
 
     # If the list view routed here with a preselected type, honour it.
-    preselected_type = st.query_params.get("type", "daily")
+    preselected_type = st.query_params.get("type", "memory")
     if preselected_type not in type_labels:
         preselected_type = "daily"
     cur_idx = type_labels.index(preselected_type)

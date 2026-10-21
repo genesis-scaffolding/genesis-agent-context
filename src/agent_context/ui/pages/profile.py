@@ -12,7 +12,7 @@ from agent_context.ui._profile_page import render
 
 render(
     target=ProfileTarget.PROFILE,
-    title="Profile",
+    title="Persona",
     caption="Tell us about you. We use this to personalize your assistant.",
     empty_hint=(
         "No profile yet. Write a few lines about yourself — your name, "
