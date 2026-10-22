@@ -141,95 +141,6 @@ def create_journal(
         facade.shutdown()
 
 
-@router.get("/{uid}", response_model=JournalEntryOut)
-def read_journal(
-    uid: str,
-    subject: Annotated[str, Depends(current_subject)],
-) -> JournalEntryOut:
-    facade = _facade(subject)
-    try:
-        entry = facade.journal.get_entry(uid)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Journal entry not found")
-        return _journal_to_wire(entry)
-    finally:
-        facade.shutdown()
-
-
-@router.patch("/{uid}", response_model=JournalEntryOut)
-def update_journal(
-    uid: str,
-    body: JournalEntryUpdateIn,
-    subject: Annotated[str, Depends(current_subject)],
-) -> JournalEntryOut:
-    facade = _facade(subject)
-    try:
-        existing = facade.journal.get_entry(uid)
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Journal entry not found")
-
-        title = body.title if body.title is not None else existing.title
-        content = body.content if body.content is not None else existing.content
-
-        entry = Entry(
-            uid=uid,
-            date=existing.date,
-            reference_date=existing.reference_date,
-            title=title,
-            type=existing.type,
-            content=content,
-        )
-        try:
-            facade.journal.save_entry(entry)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        saved = facade.journal.get_entry(uid)
-        if saved is None:
-            raise HTTPException(status_code=500, detail="Failed to read back updated entry")
-        return _journal_to_wire(saved)
-    finally:
-        facade.shutdown()
-
-
-@router.delete("/{uid}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_journal(
-    uid: str,
-    subject: Annotated[str, Depends(current_subject)],
-) -> None:
-    facade = _facade(subject)
-    try:
-        if not facade.journal.delete_entry(uid):
-            raise HTTPException(status_code=404, detail="Journal entry not found")
-    finally:
-        facade.shutdown()
-
-
-@router.post("/{uid}/append", response_model=JournalEntryOut)
-def append_journal(
-    uid: str,
-    body: JournalAppendIn,
-    subject: Annotated[str, Depends(current_subject)],
-) -> JournalEntryOut:
-    """Append a markdown block to the entry body.
-
-    Atomic write: content is written to a temp file then renamed, so
-    concurrent appends are last-writer-safe.
-
-    400 if the entry is memory-synthesis (upsert-only).
-    404 if the entry does not exist.
-    """
-    facade = _facade(subject)
-    try:
-        entry = facade.journal.append_entry(uid, body.content)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Journal entry not found")
-        return _journal_to_wire(entry)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        facade.shutdown()
-
-
 @router.get("/resolve", response_model=JournalEntryOut)
 def resolve_journal(
     subject: Annotated[str, Depends(current_subject)],
@@ -327,5 +238,94 @@ def search_journals(
                 )
             )
         return JournalSearchOut(items=items, total=len(items), query=q)
+    finally:
+        facade.shutdown()
+
+
+@router.get("/{uid}", response_model=JournalEntryOut)
+def read_journal(
+    uid: str,
+    subject: Annotated[str, Depends(current_subject)],
+) -> JournalEntryOut:
+    facade = _facade(subject)
+    try:
+        entry = facade.journal.get_entry(uid)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        return _journal_to_wire(entry)
+    finally:
+        facade.shutdown()
+
+
+@router.patch("/{uid}", response_model=JournalEntryOut)
+def update_journal(
+    uid: str,
+    body: JournalEntryUpdateIn,
+    subject: Annotated[str, Depends(current_subject)],
+) -> JournalEntryOut:
+    facade = _facade(subject)
+    try:
+        existing = facade.journal.get_entry(uid)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+
+        title = body.title if body.title is not None else existing.title
+        content = body.content if body.content is not None else existing.content
+
+        entry = Entry(
+            uid=uid,
+            date=existing.date,
+            reference_date=existing.reference_date,
+            title=title,
+            type=existing.type,
+            content=content,
+        )
+        try:
+            facade.journal.save_entry(entry)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        saved = facade.journal.get_entry(uid)
+        if saved is None:
+            raise HTTPException(status_code=500, detail="Failed to read back updated entry")
+        return _journal_to_wire(saved)
+    finally:
+        facade.shutdown()
+
+
+@router.delete("/{uid}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_journal(
+    uid: str,
+    subject: Annotated[str, Depends(current_subject)],
+) -> None:
+    facade = _facade(subject)
+    try:
+        if not facade.journal.delete_entry(uid):
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+    finally:
+        facade.shutdown()
+
+
+@router.post("/{uid}/append", response_model=JournalEntryOut)
+def append_journal(
+    uid: str,
+    body: JournalAppendIn,
+    subject: Annotated[str, Depends(current_subject)],
+) -> JournalEntryOut:
+    """Append a markdown block to the entry body.
+
+    Atomic write: content is written to a temp file then renamed, so
+    concurrent appends are last-writer-safe.
+
+    400 if the entry is memory-synthesis (upsert-only).
+    404 if the entry does not exist.
+    """
+    facade = _facade(subject)
+    try:
+        entry = facade.journal.append_entry(uid, body.content)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        return _journal_to_wire(entry)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         facade.shutdown()
