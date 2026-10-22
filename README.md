@@ -45,6 +45,7 @@ src/agent_context/
   backup/        Zip export/import (journals + profile)
   ui/            Streamlit UI (Memory, Persona, Protocol, Settings pages)
   users/         Per-user auth store (htpasswd)
+  seed/          Default persona + protocol written at account creation
 ```
 
 ## Docker
@@ -100,6 +101,21 @@ docker run -d --name gac-smoke \
 
 The bootstrap password lands in the container environment (visible in
 `docker inspect`), so rotate it after first boot.
+
+### Default profile documents
+
+Whichever path creates the account, the new user starts with a persona
+(`profile.md`) and an operating protocol (`protocol.md`) written into their
+own profile root. The seed runs once, at creation, through the normal
+versioned write, so it is version 1 in that user's history and can be
+restored or overwritten like any other document.
+
+A document that already exists is never overwritten, so re-creating an
+account keeps whatever is there.
+
+To give one account a different starting point, write the document into
+`<data>/agent-context/<user>/profile/` before creating the account, or
+`PUT` it afterwards; either way the seed leaves it alone.
 
 ### Notes
 

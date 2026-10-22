@@ -8,7 +8,8 @@ here; they never duplicate the verify logic.
 Public surface:
 
 - :func:`verify_credentials` — username + plain password -> bool
-- :func:`create_user` — append a new user to the table AND htpasswd
+- :func:`create_user` — append a new user to the table AND htpasswd,
+  and seed their profile and protocol documents (ADR-036)
 - :func:`change_password` — replace a user's hash AND htpasswd entry
 - :func:`list_users` — list usernames in the table
 - :func:`delete_user` — remove a user from the table AND htpasswd

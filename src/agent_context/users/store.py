@@ -19,6 +19,7 @@ table; the orchestration moves to the public wrappers.
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import re
 import tempfile
@@ -28,7 +29,10 @@ import yaml
 from pydantic import BaseModel, field_validator
 
 from ..configs import DEFAULT_APP_NAME, DEFAULT_STATE_HOME
+from ..seed import seed_new_account
 from .password import hash_password, needs_rehash, verify_hash
+
+_log = logging.getLogger(__name__)
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 """Allowed usernames: ASCII letters/digits/underscore/dash, 1-32 chars."""
@@ -191,6 +195,14 @@ def create_user(username: str, password: str) -> None:
     accepted by Radicale's htpasswd and the permissive ``[base]``
     rights rule grants access.
 
+    Finally seeds the user's profile and protocol documents from
+    the packaged defaults (ADR-036), so a new account is usable
+    straight away. Seeding runs after both stores are written and
+    never clobbers a document that already exists. A seeding
+    failure is logged, not raised: by that point the account
+    exists, and refusing to report success would strand the user
+    outside an account they can reach.
+
     Raises :class:`UserStoreError` (from the underlying
     :meth:`UserStore.add`) on duplicate usernames or invalid
     input. The htpasswd is only written when the users-table
@@ -208,6 +220,13 @@ def create_user(username: str, password: str) -> None:
         # call ``ensure_user`` and recover. But surface the error
         # so the operator notices.
         raise
+    seed_result = seed_new_account(username)
+    if seed_result.errors:
+        _log.warning(
+            "account %r created but its profile documents could not be seeded: %s",
+            username,
+            "; ".join(seed_result.errors),
+        )
 
 
 def change_password(username: str, new_password: str) -> None:

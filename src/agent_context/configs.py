@@ -294,8 +294,29 @@ def _extract_user(yaml_path: Path | None) -> str:
     return DEFAULT_USER
 
 
+def config_path_for(user: str | None = None) -> Path:
+    """Resolve a user name to a config file path. Pure: touches no disk.
+
+    Always returns <xdg_config_home>/<app_name>/<user>/configs.yaml.
+    Use this when you only need the path (the profile root is derived
+    from it by :class:`Configs`). Use :func:`resolve_config_path` when
+    you also want the directory created.
+
+    Args:
+        user: User name. None or empty string resolves to DEFAULT_USER.
+
+    Returns:
+        Absolute path to the configs.yaml file.
+    """
+    if user is None or user == "":
+        user = DEFAULT_USER
+
+    config_home = os.environ.get("XDG_CONFIG_HOME", str(DEFAULT_CONFIG_HOME))
+    return Path(config_home) / DEFAULT_APP_NAME / user / "configs.yaml"
+
+
 def resolve_config_path(user: str | None = None) -> Path:
-    """Resolve a user name to a config file path.
+    """Resolve a user name to a config file path, creating the parent dir.
 
     Always returns an explicit path under
     <xdg_config_home>/genesis/<user>/configs.yaml.
@@ -312,11 +333,8 @@ def resolve_config_path(user: str | None = None) -> Path:
         Absolute path to the configs.yaml file. The parent directory
         always exists after this call.
     """
-    if user is None or user == "":
-        user = DEFAULT_USER
-
-    config_home = os.environ.get("XDG_CONFIG_HOME", str(DEFAULT_CONFIG_HOME))
-    config_path = Path(config_home) / DEFAULT_APP_NAME / user / "configs.yaml"
+    config_path = config_path_for(user)
+    user = config_path.parent.name
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
 

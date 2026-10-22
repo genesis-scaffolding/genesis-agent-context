@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_context.profile import ProfileTarget, resolve_location
+from agent_context.seed import seed_document, seed_new_account
 from agent_context.users import (
     UserStoreError,
     change_password,
@@ -31,6 +33,15 @@ def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> UserStore:
     store = UserStore(store_path)
     monkeypatch.setattr("agent_context.users.store._default_store", store)
     return store
+
+
+@pytest.fixture
+def xdg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point every XDG root at ``tmp_path`` so per-user paths (profile
+    root, htpasswd) land in the temp dir instead of the real home."""
+    for root in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
+        monkeypatch.setenv(root, str(tmp_path / root.lower()))
+    return tmp_path
 
 
 # ---------------------------------------------------------------------------
@@ -244,3 +255,63 @@ def test_create_user_does_not_corrupt_table_on_htpasswd_failure(
     # not complete the orchestration.
     # (The test for "is the table in a sane state" is satisfied
     # by the existence check; the htpasswd failure is independent.)
+
+
+# ---------------------------------------------------------------------------
+# Profile seed at account creation (ADR-036)
+# ---------------------------------------------------------------------------
+
+
+def test_create_user_seeds_both_profile_documents(store: UserStore, xdg: Path) -> None:
+    """A new account lands both default documents in its own profile
+    root, at the canonical path for each target."""
+    create_user("alice", "pw")
+
+    root = xdg / "xdg_data_home" / "agent-context" / "alice" / "profile"
+    for target, filename in ((ProfileTarget.PROFILE, "profile.md"), (ProfileTarget.PROTOCOL, "protocol.md")):
+        path = resolve_location(target, root).path
+        assert path == root / filename
+        assert path.read_text(encoding="utf-8").strip() == seed_document(target).strip()
+
+
+def test_create_user_records_the_seed_as_the_first_snapshot(store: UserStore, xdg: Path) -> None:
+    """The seed goes through the normal write path, so history shows
+    it as version 1 with the seed note attached."""
+    from agent_context.profile import ProfileFacade
+
+    create_user("alice", "pw")
+
+    root = xdg / "xdg_data_home" / "agent-context" / "alice" / "profile"
+    history = ProfileFacade(root).history(ProfileTarget.PROFILE)
+    assert history.total == 1
+    meta = history.snapshots[0].meta
+    assert meta is not None
+    assert meta.command == "write"
+    assert meta.note is not None and meta.note.startswith("seed:")
+
+
+def test_create_user_does_not_clobber_an_existing_document(store: UserStore, xdg: Path) -> None:
+    """An account re-created over a profile root that still holds
+    documents keeps them; only the missing target is seeded."""
+    root = xdg / "xdg_data_home" / "agent-context" / "alice" / "profile"
+    root.mkdir(parents=True)
+    (root / "profile.md").write_text("my own persona\n", encoding="utf-8")
+
+    create_user("alice", "pw")
+
+    assert (root / "profile.md").read_text(encoding="utf-8") == "my own persona\n"
+    assert (root / "protocol.md").read_text(encoding="utf-8").strip() == seed_document(ProfileTarget.PROTOCOL).strip()
+
+
+def test_seed_new_account_reports_what_it_wrote_and_skipped(xdg: Path) -> None:
+    root = xdg / "xdg_data_home" / "agent-context" / "bob" / "profile"
+    first = seed_new_account("bob")
+    assert first.ok is True
+    assert first.written == (ProfileTarget.PROFILE, ProfileTarget.PROTOCOL)
+    assert first.skipped == ()
+    assert first.profile_root == root
+
+    # Idempotent: a second call finds both files present and writes nothing.
+    second = seed_new_account("bob")
+    assert second.written == ()
+    assert second.skipped == (ProfileTarget.PROFILE, ProfileTarget.PROTOCOL)
