@@ -1,4 +1,4 @@
-"""Facade for profile and life-story storage.
+"""Facade for profile and protocol storage.
 
 Per-user, on-disk, versioned. The facade is the only entry point
 callers should use: it owns the FsOps instance, threads it through

@@ -116,7 +116,7 @@ class JournalSearchOut(BaseModel):
 
 
 # Wire-side mirror of ProfileTarget. The enum values
-# (``profile`` / ``life_story``) are the on-wire strings; the
+# (``profile`` / ``protocol``) are the on-wire strings; the
 # Python identifier is ``ProfileWireTarget`` to keep import lines
 # short elsewhere.
 ProfileWireTarget = ProfileTarget

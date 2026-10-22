@@ -71,7 +71,7 @@ class Facade:
 
     @property
     def profile(self) -> ProfileFacade:
-        """Return the Profile facade for profile and life-story storage."""
+        """Return the Profile facade for persona and protocol storage."""
         if self._profile is None:
             from ..profile.facade import ProfileFacade
 

@@ -62,7 +62,7 @@ class Paths(BaseModel):
     JWT signing key serve every account (ADR-019).
 
     ``profile_root`` is per-user (ADR-025): each account gets its
-    own profile and life-story files. Resolves under
+    own profile and protocol files. Resolves under
     ``<xdg_data>/<app_name>/<user>/profile``.
     """
 

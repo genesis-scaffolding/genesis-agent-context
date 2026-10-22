@@ -36,14 +36,32 @@ uv run gac journals list
 uv run gac journals read <uid>
 uv run gac journals create "content here" --type memory
 uv run gac journals delete <uid>
+
+# Profile store (persona + operating protocol)
+uv run gac profile list
+uv run gac profile read protocol
+uv run gac profile write protocol --content "..."
+uv run gac profile edit protocol --old "old" --new "new" --global-replace
+uv run gac profile history protocol
+uv run gac profile restore protocol --version 2026-10-22T031500000Z
+
+# Operating protocol (same operations, target pinned)
+uv run gac protocol read
+uv run gac protocol write --content-file protocol.md
+uv run gac protocol history
 ```
+
+The profile store is exposed on the API under two paths: the generic
+`/profile/{target}` routes (target `profile` or `protocol`) and the
+entity-level `/protocol` routes, which are pinned to the operating
+protocol. Both share one implementation.
 
 ## Architecture
 
 ```
 src/agent_context/
-  api/           FastAPI REST API (journals, profile endpoints)
-  cli/           Typer CLI (info, journal commands, user management)
+  api/           FastAPI REST API (journals, profile, protocol endpoints)
+  cli/           Typer CLI (info, journal commands, profile + protocol, user management)
   core/          Facade -- single entry point to all stores
   journal/       Journal facade (memory + memory-synthesis + daily-handover)
   profile/       Profile facade (profile.md, protocol.md, versions)
