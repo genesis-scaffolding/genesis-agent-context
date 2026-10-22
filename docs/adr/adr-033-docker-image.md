@@ -40,8 +40,8 @@ bind them. The API's /health endpoint is the container health probe.
 The first account can be created two ways. By default no account is
 created: the first user signs up through the UI. Alternatively, setting
 GAC_BOOTSTRAP_USER and GAC_BOOTSTRAP_PASSWORD makes the entrypoint run
-an idempotent bootstrap script (`gac user create`) as the dropped user
-before the app starts. The bootstrap is opt-in and off when the
+an idempotent bootstrap script (the `agent_context.users` API) as the
+dropped user before the app starts. The bootstrap is opt-in and off when the
 variables are unset. Because the bootstrap password lands in the
 container environment (visible in `docker inspect`), it should be
 rotated after first boot.

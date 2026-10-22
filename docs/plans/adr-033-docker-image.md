@@ -5,6 +5,8 @@
 1. Fix the stale Makefile: `run-cli` -> `uv run gac`, `ui` -> `uv run
    gac-ui` (the ASGI wrapper that mounts the session cookie routes),
    `api` -> `uv run gac-api`; `serve` keeps `$(MAKE) -j 2 ui api`.
+   (Superseded by ADR-035: the `run-cli` target and the `gac` script were
+   removed when the in-repo CLI was purged.)
 2. Fix `_extract_user` in `src/agent_context/configs.py` to match the
    LAST occurrence of the app directory (innermost semantics) and
    update the stale docstring.

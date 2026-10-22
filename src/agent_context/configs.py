@@ -26,7 +26,7 @@ from pydantic_settings import BaseSettings
 DEFAULT_APP_NAME = "agent-context"
 DEFAULT_USER = "default"
 
-# Env var used by the CLI to hand the resolved config path to the UI subprocess.
+# Env var used by the UI launcher to hand the resolved config path to the UI.
 # Both sides import this constant so they cannot drift.
 CONFIG_PATH_ENV = "GAC__CONFIG_PATH"
 

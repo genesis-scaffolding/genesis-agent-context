@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test test-all test-integration typecheck run-cli run-ui ui api serve docker-build docker-run clean
+.PHONY: help install install-dev lint format test test-all test-integration typecheck run-ui ui api serve docker-build docker-run clean
 
 # -----------------------------------------------------------------------------
 # Meta
@@ -50,9 +50,6 @@ test-integration:  ## Run integration tests only
 # -----------------------------------------------------------------------------
 # Run
 # -----------------------------------------------------------------------------
-
-run-cli:  ## Run the CLI app
-	uv run gac
 
 ui:  ## Start the Streamlit UI for the default user (GAC_UI_HOST/GAC_UI_PORT, default 0.0.0.0:3001)
 	uv run gac-ui

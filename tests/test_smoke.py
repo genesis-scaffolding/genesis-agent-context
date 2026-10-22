@@ -122,7 +122,7 @@ class TestResolveConfigPath:
         assert resolve_config_path("") == default_path
 
     def test_config_path_env_constant(self) -> None:
-        """CLI and UI share this constant so they cannot drift."""
+        """The UI launcher and the UI share this constant so they cannot drift."""
         assert CONFIG_PATH_ENV == "GAC__CONFIG_PATH"
 
 
@@ -131,12 +131,12 @@ class TestSmoke:
 
     def test_imports_work(self) -> None:
         """Verify all packages can be imported."""
-        from agent_context.cli import app as cli_app
+        from agent_context.api import app as api_app
         from agent_context.core import facade
         from agent_context.ui import app as ui_app  # noqa: F401
 
         assert facade.Facade is not None
-        assert cli_app.app is not None
+        assert api_app.app is not None
 
     def test_tests_are_discovered(self) -> None:
         """This test ensures pytest discovers and runs tests."""

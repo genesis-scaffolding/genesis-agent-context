@@ -122,7 +122,11 @@ Rules:
   the effective entry is a synthesis.
 - Handover page: day view, raw log, read-only in the UI (workers write).
 
-### CLI surface (for the gac consumer CLI, task t-wcsn5f)
+### CLI surface (consumer CLI, task t-wcsn5f)
+
+The agent-facing CLI is not part of this repo. It ships in the
+my-agent-skills repo and talks to this backend over the REST API, so the
+command surface below is a mapping to endpoints, not code in this repo.
 
 ```
 gac memory append "<bullet>"            # -> POST /journals/{uid}/append

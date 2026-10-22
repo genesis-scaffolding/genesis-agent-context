@@ -8,7 +8,6 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
     "streamlit>=1.61.1",
-    "typer>=0.27.1",
     "caldav>=1.3.9",
     "pydantic-settings>=2.15.0",
     "radicale>=3.7.8",
@@ -19,9 +18,8 @@ dependencies = [
 ]
 
 [project.scripts]
-gac = "agent_context.cli.app:main"
 gac-api = "agent_context.api.cli:main"
-gac-ui = "agent_context.cli.app:main_ui"
+gac-ui = "agent_context.ui.cli:main_ui"
 
 [tool.uv]
 package = true

@@ -34,7 +34,6 @@ genesis/
     facade.py     # CardDAVFacade entry point
   journal/        # Journal entries
     facade.py     # JournalFacade entry point
-  cli/            # Command-line interface
   ui/             # Streamlit web interface
 ```
 

@@ -2,7 +2,7 @@
 
 ## Context
 
-The application has multiple subpackages (core, cli, ui). Without clear boundaries, modules become tightly coupled and hard to test, extend, or replace.
+The application has multiple subpackages (core, api, ui). Without clear boundaries, modules become tightly coupled and hard to test, extend, or replace.
 
 ## Decision
 
@@ -13,17 +13,17 @@ We will use the facade pattern and enforce directional imports.
 ```
 src/<app_name>/
 ├── configs.py     # Data models (Pydantic), ConfigsLoader, path defaults
-├── core/          # The library. Facade lives here. No dependencies on cli or ui.
-├── cli/           # Typer CLI. Depends on core only.
+├── core/          # The library. Facade lives here. No dependencies on api or ui.
+├── api/           # FastAPI REST API. Depends on core only.
 └── ui/            # Streamlit UI. Depends on core only.
 ```
 
 Each subpackage has a clear role:
 - **core** — the library. Contains facades, business logic, data models.
-- **cli** — command-line entry point. Imports from core.
+- **api** — HTTP entry point. Imports from core.
 - **ui** — web UI entry point. Imports from core.
 
-**core is the library. cli and ui are consumers of the library.**
+**core is the library. api and ui are consumers of the library.**
 
 ### Facade
 
@@ -35,14 +35,14 @@ Import direction must be one-way. If A imports B, B must not import A.
 
 ```
 # Allowed
-cli -> core
+api -> core
 ui -> core
 
 # Forbidden
-core -> cli
+core -> api
 core -> ui
-cli -> ui
-ui -> cli
+api -> ui
+ui -> api
 ```
 
 ### Shared Types
@@ -63,4 +63,4 @@ Use Pydantic for all data input (env vars, YAML, CLI args, API payloads).
 - Modules can be replaced without breaking callers.
 - Clear public vs private API is enforced by import direction.
 - Adding a new subpackage requires a facade and must respect import direction.
-- cli and ui can be removed or replaced independently without touching core.
+- api and ui can be removed or replaced independently without touching core.
