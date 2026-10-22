@@ -1,8 +1,8 @@
 """FastAPI application for the agent-context API.
 
-Wires up CORS, the auth router, the journals router, and the profile
-router under a single ``app`` instance. ``agent_context.api.cli`` runs this
-with ``uvicorn``.
+Wires up CORS, the auth router, the journals router, the profile
+router, and the protocol router under a single ``app`` instance.
+``agent_context.api.cli`` runs this with ``uvicorn``.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .auth import router as auth_router
 from .routers.journals import router as journals_router
 from .routers.profile import router as profile_router
+from .routers.protocol import router as protocol_router
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(journals_router)
     app.include_router(profile_router)
+    app.include_router(protocol_router)
 
     return app
 

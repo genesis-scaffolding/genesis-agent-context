@@ -6,7 +6,7 @@ under ``<data_home>/<app_name>/``:
 - ``MANIFEST.json`` at the root
 - ``journals/...`` = ``<journal_root>/...``
 - ``<user>/profile/...`` = the per-user profile directory
-  (profile.md, life-story.md and their ``.versions`` snapshots;
+  (profile.md, protocol.md and their ``.versions`` snapshots;
   ADR-025)
 
 Restore is destructive: it wipes the user's journal subtree and

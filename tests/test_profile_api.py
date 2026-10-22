@@ -10,6 +10,8 @@ The fixture seeds two users (``default``, ``alice``) and points
 
 - Full HTTP round trip for list / read / write / edit /
   history / restore.
+- The dedicated ``/protocol`` routes (the operating protocol as a
+  first-class entity) and their parity with ``/profile/protocol``.
 - 401 when the bearer token is missing or wrong.
 - Per-user isolation: alice's token never sees bob's files.
 - Error mapping for storage-layer failures (404 missing file,
@@ -340,6 +342,90 @@ def test_restore_no_snapshots_returns_400(profile_client, auth):
         json={"version": "anything"},
     )
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Dedicated /protocol routes
+# ---------------------------------------------------------------------------
+
+
+def test_protocol_read_missing_returns_404(profile_client, auth):
+    r = profile_client.get("/protocol", headers=auth)
+    assert r.status_code == 404
+
+
+def test_protocol_write_then_read(profile_client, auth):
+    r = profile_client.put("/protocol", headers=auth, json={"content": "operating rules\n"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["target"] == "protocol"
+    assert body["bytes_written"] == len("operating rules\n")
+    assert body["snapshot"] is not None
+
+    r = profile_client.get("/protocol", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["content"] == "operating rules"
+    assert r.json()["path"].endswith("/protocol.md")
+
+
+def test_protocol_edit(profile_client, auth):
+    profile_client.put("/protocol", headers=auth, json={"content": "hello world\n"})
+    r = profile_client.patch("/protocol", headers=auth, json={"old_text": "world", "new_text": "WORLD"})
+    assert r.status_code == 200
+    assert r.json()["replacements"] == 1
+    assert profile_client.get("/protocol", headers=auth).json()["content"] == "hello WORLD"
+
+
+def test_protocol_edit_errors_match_the_profile_routes(profile_client, auth):
+    profile_client.put("/protocol", headers=auth, json={"content": "foo foo\n"})
+    r = profile_client.patch("/protocol", headers=auth, json={"old_text": "foo", "new_text": "bar"})
+    assert r.status_code == 400
+    assert "matches 2 places" in r.json()["detail"]
+
+    r = profile_client.patch("/protocol", headers=auth, json={"old_text": "", "new_text": "bar"})
+    assert r.status_code == 400
+
+
+def test_protocol_history_and_restore(profile_client, auth):
+    for content in ("v1", "v2"):
+        profile_client.put("/protocol", headers=auth, json={"content": content})
+    r = profile_client.get("/protocol/history", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["target"] == "protocol"
+    assert body["total"] == 2
+
+    oldest_ts = body["rows"][-1]["filename"].removesuffix(".md")
+    r = profile_client.post("/protocol/restore", headers=auth, json={"version": oldest_ts})
+    assert r.status_code == 200
+    assert r.json()["applied_filename"].endswith(".md")
+    assert profile_client.get("/protocol", headers=auth).json()["content"] == "v1"
+
+
+def test_protocol_requires_bearer(profile_client):
+    assert profile_client.get("/protocol").status_code == 401
+    assert profile_client.put("/protocol", json={"content": "x"}).status_code == 401
+
+
+def test_protocol_routes_and_profile_routes_share_the_same_file(profile_client, auth):
+    profile_client.put("/protocol", headers=auth, json={"content": "shared\n"})
+    assert profile_client.get("/profile/protocol", headers=auth).json()["content"] == "shared"
+    profile_client.put("/profile/protocol", headers=auth, json={"content": "shared again\n"})
+    assert profile_client.get("/protocol", headers=auth).json()["content"] == "shared again"
+
+
+def test_protocol_is_listed_by_the_profile_store(profile_client, auth):
+    profile_client.put("/protocol", headers=auth, json={"content": "listed\n"})
+    rows = {row["target"]: row for row in profile_client.get("/profile", headers=auth).json()["rows"]}
+    assert rows["protocol"]["exists"] is True
+    assert rows["protocol"]["bytes"] == len("listed\n")
+
+
+def test_alice_cannot_see_default_protocol(profile_client, auth):
+    profile_client.put("/protocol", headers=auth, json={"content": "default's protocol\n"})
+    alice_token = _login(profile_client, "alice", "alice-pw")
+    r = profile_client.get("/protocol", headers=_auth(alice_token))
+    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------

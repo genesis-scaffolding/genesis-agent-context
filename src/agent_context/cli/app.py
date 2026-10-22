@@ -11,10 +11,13 @@ import typer
 
 from ..configs import CONFIG_PATH_ENV, DEFAULT_USER, resolve_config_path
 from ..core.facade import Facade
+from .profile import profile_app, protocol_app
 from .user import user_app
 
 app = typer.Typer(help="CLI for agent-context (persona, memory, and handover stores).")
 app.add_typer(user_app, name="user")
+app.add_typer(profile_app, name="profile")
+app.add_typer(protocol_app, name="protocol")
 
 _user_option = typer.Option(
     DEFAULT_USER,

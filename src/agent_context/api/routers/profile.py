@@ -1,6 +1,6 @@
-"""Profile endpoints: per-user profile and life-story markdown store.
+"""Profile endpoints: per-user profile and protocol markdown store.
 
-ADR-025. Six endpoints under ``/profile``:
+ADR-025, ADR-034. Six endpoints under ``/profile``:
 
 - ``GET    /profile``                  list both targets
 - ``GET    /profile/{target}``         read
@@ -8,6 +8,11 @@ ADR-025. Six endpoints under ``/profile``:
 - ``PATCH  /profile/{target}``         surgical edit
 - ``GET    /profile/{target}/history`` list snapshots
 - ``POST   /profile/{target}/restore`` restore from snapshot
+
+``{target}`` accepts ``profile`` (the persona) and ``protocol`` (the
+agent operating protocol). The protocol also has its own pinned
+surface under ``/protocol`` (see :mod:`.protocol`); both routers
+share the implementation in :mod:`._profile_ops`.
 
 The handler builds a :class:`ProfileFacade` from the JWT subject
 on every request so one token can only touch one user's data.
@@ -29,8 +34,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from ...configs import resolve_config_path
-from ...core.facade import Facade
 from ...profile import ProfileTarget, parse_target
 from ..auth import current_subject
 from ..schemas import (
@@ -41,24 +44,20 @@ from ..schemas import (
     ProfileListRowOut,
     ProfileRestoreIn,
     ProfileRestoreOut,
-    ProfileSnapshotOut,
     ProfileWireTarget,
     ProfileWriteIn,
     ProfileWriteOut,
 )
+from ._profile_ops import (
+    edit_target,
+    facade_for,
+    history_target,
+    read_target,
+    restore_target,
+    write_target,
+)
 
 router = APIRouter(prefix="/profile", tags=["profile"])
-
-
-def _facade(subject: str) -> Facade:
-    """Build a per-request :class:`Facade` for ``subject``.
-
-    Same pattern as the productivity router: a fresh facade per
-    request, scoped to the JWT subject. Only ``facade.profile`` is
-    used here; the rest of the Facade (caldav, journal, ...) is
-    constructed lazily and never reached.
-    """
-    return Facade(resolve_config_path(subject))
 
 
 def _parse_target_path_param(target: str) -> ProfileTarget:
@@ -67,13 +66,6 @@ def _parse_target_path_param(target: str) -> ProfileTarget:
         return parse_target(target)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-def _snapshot_filename(snap) -> str | None:
-    """Render the snapshot filename (None when the snapshot was dedup-skipped)."""
-    if snap is None or not snap.ok:
-        return None
-    return snap.filename
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +78,7 @@ def list_profiles(
     subject: Annotated[str, Depends(current_subject)],
 ) -> ProfileListOut:
     """List both profile targets with active path + existence + size."""
-    facade = _facade(subject)
+    facade = facade_for(subject)
     try:
         listed = facade.profile.list()
         return ProfileListOut(
@@ -117,19 +109,7 @@ def read_profile(
 ) -> ProfileContentOut:
     """Read the canonical content for ``target`` (trimmed)."""
     parsed = _parse_target_path_param(target)
-    facade = _facade(subject)
-    try:
-        result = facade.profile.read(parsed)
-        if not result.ok:
-            # File missing or empty: 404.
-            raise HTTPException(status_code=404, detail=result.error)
-        return ProfileContentOut(
-            target=ProfileWireTarget(result.target.value if result.target is not None else parsed.value),
-            path=result.path,
-            content=result.content,
-        )
-    finally:
-        facade.shutdown()
+    return read_target(subject, parsed)
 
 
 # ---------------------------------------------------------------------------
@@ -145,19 +125,7 @@ def write_profile(
 ) -> ProfileWriteOut:
     """Overwrite the canonical file. Creates a snapshot after success."""
     parsed = _parse_target_path_param(target)
-    facade = _facade(subject)
-    try:
-        result = facade.profile.write(parsed, body.content, note=body.note)
-        if not result.ok:
-            raise HTTPException(status_code=500, detail=result.error)
-        return ProfileWriteOut(
-            target=ProfileWireTarget(result.target.value if result.target is not None else parsed.value),
-            path=result.path,
-            bytes_written=result.bytes_written,
-            snapshot=_snapshot_filename(result.snapshot),
-        )
-    finally:
-        facade.shutdown()
+    return write_target(subject, parsed, body)
 
 
 # ---------------------------------------------------------------------------
@@ -178,35 +146,7 @@ def edit_profile(
     (with the snapshot filename if a snapshot was taken).
     """
     parsed = _parse_target_path_param(target)
-    facade = _facade(subject)
-    try:
-        result = facade.profile.edit(
-            parsed,
-            body.old_text,
-            body.new_text,
-            global_replace=body.global_replace,
-            note=body.note,
-        )
-        if not result.ok:
-            # Storage-layer errors are user mistakes (empty / not
-            # found / ambiguous). 500 is reserved for actual bugs;
-            # re-read failures during snapshot are not exercised
-            # here because the edit already wrote the file.
-            err = result.error
-            if "oldText is empty" in err or "oldText not found" in err or "matches" in err:
-                raise HTTPException(status_code=400, detail=err)
-            if "does not exist" in err:
-                raise HTTPException(status_code=404, detail=err)
-            raise HTTPException(status_code=500, detail=err)
-        return ProfileWriteOut(
-            target=ProfileWireTarget(result.target.value if result.target is not None else parsed.value),
-            path=result.path,
-            bytes_written=result.bytes_written,
-            replacements=result.replacements,
-            snapshot=_snapshot_filename(result.snapshot),
-        )
-    finally:
-        facade.shutdown()
+    return edit_target(subject, parsed, body)
 
 
 # ---------------------------------------------------------------------------
@@ -226,29 +166,7 @@ def profile_history(
     response ``total`` reports the unfiltered count.
     """
     parsed = _parse_target_path_param(target)
-    facade = _facade(subject)
-    try:
-        result = facade.profile.history(parsed, limit=limit)
-        if not result.ok:
-            raise HTTPException(status_code=500, detail=result.error)
-        rows = [
-            ProfileSnapshotOut(
-                ts=row.ts,
-                filename=row.filename,
-                sha=row.meta.this_sha[:12] if row.meta is not None else None,
-                size=row.size,
-                command=row.meta.command if row.meta is not None else None,
-                note=row.meta.note if row.meta is not None else None,
-            )
-            for row in result.snapshots
-        ]
-        return ProfileHistoryOut(
-            target=ProfileWireTarget(result.target.value if result.target is not None else parsed.value),
-            rows=rows,
-            total=result.total,
-        )
-    finally:
-        facade.shutdown()
+    return history_target(subject, parsed, limit)
 
 
 # ---------------------------------------------------------------------------
@@ -268,19 +186,4 @@ def profile_restore(
     restore, so the restore is reversible.
     """
     parsed = _parse_target_path_param(target)
-    facade = _facade(subject)
-    try:
-        result = facade.profile.restore(parsed, body.version, note=body.note)
-        if not result.ok:
-            err = result.error
-            if "No snapshots exist" in err or "matches prefix" in err or "matches" in err:
-                raise HTTPException(status_code=400, detail=err)
-            raise HTTPException(status_code=500, detail=err)
-        return ProfileRestoreOut(
-            target=ProfileWireTarget(result.target.value if result.target is not None else parsed.value),
-            applied_filename=result.applied_filename,
-            applied_size=result.applied_size,
-            pre_restore_snapshot=_snapshot_filename(result.pre_restore_snapshot),
-        )
-    finally:
-        facade.shutdown()
+    return restore_target(subject, parsed, body)

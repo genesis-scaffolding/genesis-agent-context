@@ -1,7 +1,7 @@
 """Pure path resolution for the profile subpackage.
 
 Single source of truth for the two targets (``profile``,
-``life_story``) and their canonical filenames. No I/O — every
+``protocol``) and their canonical filenames. No I/O — every
 function here is deterministic on its inputs.
 
 The cwd-vs-project scope concept from the out-of-tree personalize

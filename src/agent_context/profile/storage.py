@@ -1,7 +1,7 @@
 """File I/O for the profile subpackage.
 
 Read / write / edit over the two canonical files (``profile.md``,
-``life-story.md``) under the per-user profile root.
+``protocol.md``) under the per-user profile root.
 
 Errors that are *user mistakes* (file missing, file empty, edit
 match-zero, edit match-many, invalid target) come back via

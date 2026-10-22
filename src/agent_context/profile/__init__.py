@@ -1,4 +1,4 @@
-"""Per-user profile and life-story storage.
+"""Per-user profile and protocol storage.
 
 One canonical markdown file per target per user, with versioned
 auto-snapshots for rollback. Mounted on the FastAPI app under

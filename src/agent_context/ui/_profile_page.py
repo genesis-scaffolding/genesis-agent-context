@@ -1,7 +1,7 @@
-"""Shared renderer for the Profile and Life Story pages.
+"""Shared renderer for the Persona and Protocol pages.
 
 Both pages target the same per-user markdown store (``profile`` /
-``life_story``) with the same shape, so they share this renderer.
+``protocol``) with the same shape, so they share this renderer.
 The two ``pages/*.py`` files are thin wrappers that pass in the
 target name, page title, caption, and empty-state hint.
 
@@ -162,7 +162,7 @@ def render(
     """Render the full page.
 
     ``key_prefix`` namespaces every Streamlit widget key so the
-    profile and life_story pages don't collide in session_state
+    profile and protocol pages don't collide in session_state
     (they're served in the same Streamlit process).
     """
     facade = _facade()
