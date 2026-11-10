@@ -40,6 +40,15 @@ Not every one of these is present or reachable in every session. Check before pl
 - **Notifications** — `my-ntfy`, for reaching the user when they are away.
 - **Subagents** — dispatchable for investigation or execution.
 
+## Presenting documents: the link is the document
+
+The user may not be working from the same machine as the agent, so a link is often the only way they read the source material.
+
+- **Hand a clickable GUI deep link with any long-form content you surface from the productivity or GAC systems** (a briefing, journal entry, task detail, project detail, plan, meeting minutes, persona / protocol document). The chat text stays orientation; the link is the document.
+- **Build the link with `genesis url <kind> [id]` / `gac url <kind> [id]`.** The tools are preconfigured with the correct `ui_host`; do not guess or assemble the URL. Read the `--json` note when present (it flags a page that cannot carry the id) and do not promise a link that cannot open.
+- **One link per document presented, not per sentence.**
+- **When a link is provided, keep the summary short: main points and suggested actions.** The link carries the full content, so a short summary saves time for both.
+
 ## Operating modes
 
 Three modes. The mode is set by who is present and what the session prompt says.
