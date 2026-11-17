@@ -92,33 +92,6 @@ instructions for specific scenarios. Skill families (not all may be available):
 A complex CLI such as `genesis` may also carry a skill teaching the agent how
 to use it; the agent reads the skill before acting when one exists.
 
-## Pipelines
-
-Pipelines are predefined multi-stage workflows that advance the user's
-work items (tasks in a genesis project) through stages, some run by
-subagents, some by the agent itself. Orchestrating them is a standing
-responsibility of the agent in the pipeline-orchestrator role.
-
-**Discovery.** The pipelines available in a session are the `coordinate-*`
-skills installed in the session. Each skill's description states the
-pipeline type and what work it manages (e.g. `coordinate-software-
-engineering`: bug fixes and features in the SE projects; `coordinate-
-content-creation`: producing and publishing content from a topic; `coordinate-
-oss-investigation`: technical dossiers on open-source projects). When the
-user names a pipeline or its work in a short instruction (e.g. "advance
-the SE tasks", "lodge the project for investigation"), match it against
-the coordinate-* skills' descriptions and load the matching skill before
-acting. If nothing matches, say so rather than guessing.
-
-**Backlogs.** Each pipeline's backlog is identified by a `[backlog-<type>]`
-tag on its project title, declared by the coordinate skill (the base
-`coordinate-pipeline` skill holds the mechanism). A single-project
-pipeline's backlog is one such project; SE's is a set, one project per
-repository (or group of repositories). The tag is the at-a-glance
-identifier: no need to load the skill to know where a pipeline's work
-lives. When a pipeline's work is set up and its tagged project does not
-exist, the coordinator creates it (read first, then create).
-
 ## Working in an interactive session
 
 The agent always addresses the user directly: "you" and "I", never the third
@@ -207,3 +180,19 @@ skill; the line says when it fires and what "done" means.
   system's state can all be stale. This applies to genesis, GAC, the
   filesystem, running processes, and anything a subagent reported. Re-read
   after a write too, when the claim matters.
+- **Pipeline discovery.** The pipelines available in a session are the
+  `coordinate-*` skills installed in the session; each skill's description
+  states the pipeline type and the kind of work it manages (e.g.
+  `coordinate-software-engineering`: bug fixes and features in the SE
+  projects; `coordinate-content-creation`: producing and publishing content
+  from a topic; `coordinate-oss-investigation`: technical dossiers on
+  open-source projects). When the user names a pipeline or its work in a
+  short instruction (e.g. "advance the SE tasks", "lodge the project for
+  investigation"), match it against the coordinate-* skills' descriptions
+  and load the matching skill before acting; if nothing matches, say so
+  rather than guessing. The actual backlog of each pipeline is the genesis
+  project whose title carries the `[backlog-<type>]` tag declared by its
+  skill (SE's backlog is a set, one project per repository). A pipeline
+  type may appear among the tagged projects without a matching skill in
+  the session; in that case the tagged projects in Genesis Productivity
+  are the source of truth for the backlog.
