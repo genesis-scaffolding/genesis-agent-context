@@ -67,6 +67,15 @@ the following services, deployed and accessible before the session:
   items for any pipelines the user has (e.g. SE tasks, content-creation tasks,
   investigation tasks): the commitments stored here belong to the user, but may
   be executed by the agent.
+- **The Knowledge Base (KB)** — the user's local Obsidian vault holding the
+  user's knowledge, available in the working directory when present. Like
+  GAC and Genesis, a session may or may not have it. It stores the
+  Notebook (the user's notes and work in progress), the source notes
+  collection (raw captures from a source, immutable once created), and the
+  Wiki (synthesised, authoritative entries), and it carries built-in skills
+  so subagent sessions can be started inside it for deeper work
+  (ingestion, capturing a URL into sources, deep research, substantial
+  changes). Read its own AGENTS.md before touching it.
 - **Crawl4ai** — accessing web content.
 - **ntfy** — sending the user notifications.
 - **Pi subagents** — the mechanism the pipeline orchestrator uses to dispatch
@@ -134,10 +143,36 @@ These fire often enough to be worth naming. The procedure for each lives in a
 skill; the line says when it fires and what "done" means.
 
 - **Focus session (interactive, on request).** Operate the user's session
-  clock: start, stop, or lodge a session when the user asks. Done means the
+  clock: start, stop, or lodge a session when the user asks. Never start or
+  stop a session on my own judgement (25 Nov instruction: let the pomodoro
+  run unless the user specifically asks to stop; a countdown self-stops when
+  its due time passes). Done means the
   time-log entry exists with the right label, category and duration. Two
   boundaries: confirm the focus with the user when it is unclear, and never
   pick the task yourself. Procedure: `genesis-productivity`.
+- **Capture Open Loops (interactive, ad-hoc).** Fire when the user asks to
+  "capture" or "note" something down, or when the agent infers that an open
+  loop has emerged from the current conversation and suggests capturing it.
+  1. **Classify.** Best effort into one of: *action* (the user owes the
+  world something, or the ball is in someone else's court, a task),
+  *knowledge* (a fact, URL, or lesson, a source note), or *idea* (a muse or
+  candidate, an idea note).
+  2. **Confirm.** Show the user the detected loop(s), how each is specified
+  and classified, and check that the understanding is correct and that the
+  user wants them captured. No routing before this check.
+  3. **Route.** Each accepted loop to its store: *action* → a task in
+  Genesis Productivity, without a project unless the user explicitly names
+  one (waiting items: lodge as a task and note the pending / waiting state
+  in the description); *knowledge* → a source ingestion in the KB, done by a
+  subagent (a subagent session started inside the vault, running its
+  ingestion skill); *idea* → a dated note entry in the KB's Notebook.
+  4. **Fallback.** When the needed system is not available in this session,
+  (create and) append to a markdown file in the current working directory
+  representing the bucket: `captures/tasks.md`, `captures/knowledge.md`,
+  `captures/ideas.md` (one file per bucket).
+  Done means each accepted loop is named, classified, and stored. Capture
+  carries no evaluation; processing of what was captured (clarification,
+  dates, mining ideas) is a batched pass, not part of this routine.
 - **Status report (interactive, on request).** Bring the user a snapshot of
   where things stand. Done means the user knows, without opening any files:
   the state of the productivity system (the day / week / month via `genesis
